@@ -1,0 +1,10 @@
+[package]
+name = "address_checker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dotenv = "0.15.0"
+reqwest = { version = "0.12.4", features = ["json"] }
+sqlx = { version = "0.7.4", features = ["chrono", "mysql", "runtime-async-std", "runtime-tokio-rustls", "sqlx-mysql", "uuid"] }
+tokio = { version = "1.38.0", features = ["full"] }
