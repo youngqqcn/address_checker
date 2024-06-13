@@ -1,4 +1,4 @@
-use std::{ops::Add, sync::Arc};
+use std::sync::Arc;
 
 use dotenv::dotenv;
 use ethers::{
@@ -8,7 +8,7 @@ use ethers::{
     types::U256,
 };
 use eyre::Result;
-use sqlx::{mysql::MySqlPoolOptions, FromRow, MySql};
+use sqlx::{mysql::MySqlPoolOptions, FromRow};
 
 // #[derive(FromRow, Debug, Clone)]
 #[derive(FromRow, Debug, PartialEq, Eq, Clone)]
@@ -61,12 +61,13 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
 
     println!("{:?}", row);
 
+    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
     let account = row.addr.parse::<Address>().unwrap();
-    let base_balance = get_eth_balance(account).await.unwrap();
+    let base_balance = get_eth_balance(rpc_url.clone(), account).await.unwrap();
     let usdt_contract = "0x55d398326f99059fF775485246999027B3197955"
         .parse::<Address>()
         .unwrap();
-    let usdt_balance = get_erc20_token_balance(account, usdt_contract)
+    let usdt_balance = get_erc20_token_balance(rpc_url.clone(), account, usdt_contract)
         .await
         .unwrap();
 
@@ -85,10 +86,13 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-async fn get_eth_balance(address: Address) -> Result<U256, Box<dyn std::error::Error>> {
+async fn get_eth_balance(
+    rpc_url: String,
+    address: Address,
+) -> Result<U256, Box<dyn std::error::Error>> {
     // 请求rpc
 
-    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+    // let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
     let client = Provider::<Http>::try_from(rpc_url)?;
     let client = Arc::new(client);
 
@@ -109,11 +113,12 @@ abigen!(
 );
 
 async fn get_erc20_token_balance(
+    rpc_url: String,
     account: Address,
     contract: Address,
 ) -> Result<U256, Box<dyn std::error::Error>> {
     // 请求rpc
-    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+
     let client = Provider::<Http>::try_from(rpc_url)?;
     let client = Arc::new(client);
 
@@ -143,7 +148,8 @@ mod tests {
             .parse::<Address>()
             .unwrap();
 
-        let x = get_eth_balance(account).await.unwrap();
+        let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+        let x = get_eth_balance(rpc_url, account).await.unwrap();
         assert_eq!(x.gt(&U256::from(0)), true);
     }
 
@@ -157,7 +163,10 @@ mod tests {
         let contract = "0x55d398326f99059fF775485246999027B3197955"
             .parse::<Address>()
             .unwrap();
-        let x = get_erc20_token_balance(account, contract).await.unwrap();
+        let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+        let x = get_erc20_token_balance(rpc_url, account, contract)
+            .await
+            .unwrap();
         assert_eq!(x.gt(&U256::from(0)), true);
     }
 }
