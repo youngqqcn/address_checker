@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Add, sync::Arc};
 
 use dotenv::dotenv;
 use ethers::{
@@ -18,7 +18,8 @@ struct AddressBalance {
     token: String,
     addr: String,
     checked: bool,
-    balance: String,
+    base_balance: String,
+    usdt_balance: String,
 }
 
 #[tokio::main]
@@ -27,18 +28,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
 
     connect_mysql().await?;
-
-    // request_rpc().await?;
-
-    // request_rpc_bsc().await?;
-
-    // let ret = get_eth_balance(
-    //     "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
-    //         .parse::<Address>()
-    //         .unwrap(),
-    // )
-    // .await?;
-    // println!("ret = {}", ret);
 
     Ok(())
 }
@@ -53,8 +42,7 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
         .unwrap();
     // let mut conn = pool.acquire().await.unwrap();
 
-    // TODO: 处理空的情况
-    let row = sqlx::query_as::<_, AddressBalance>(
+    let result = sqlx::query_as::<_, AddressBalance>(
         "SELECT * from  address_balance where checked = 0 LIMIT 1",
     )
     .bind(1)
@@ -62,84 +50,38 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
     .await
     .unwrap();
 
-    match row.clone() {
-        Some(row) => {
-            println!("Found row: {:?}", row);
-            // 处理查询到的结果
-        }
+    let row = match result {
+        Some(row) => row,
         None => {
-            println!("No rows found.");
             // 处理查询结果为空的情况
+            println!("No rows found.");
             return Ok(());
         }
     };
 
     println!("{:?}", row);
 
-    // let inserted_row =
-    //     sqlx::query("INSERT INTO address_balance(chain, token, addr) VALUES(?, ?, ?)")
-    //         .bind("BSC")
-    //         .bind("BNB")
-    //         .bind("0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e")
-    //         .execute(&pool)
-    //         .await
-    //         .unwrap();
-    // println!("inserted row: {:?}", inserted_row);
-
-
-    let updated_row = sqlx::query("UPDATE address_balance SET balance=? , checked=1 WHERE id =?")
-        .bind("123")
-        .bind(row.unwrap().id.clone())
-        .execute(&pool)
+    let account = row.addr.parse::<Address>().unwrap();
+    let base_balance = get_eth_balance(account).await.unwrap();
+    let usdt_contract = "0x55d398326f99059fF775485246999027B3197955"
+        .parse::<Address>()
+        .unwrap();
+    let usdt_balance = get_erc20_token_balance(account, usdt_contract)
         .await
         .unwrap();
 
+    let updated_row = sqlx::query(
+        "UPDATE address_balance SET base_balance=?, usdt_balance=?, checked=1 WHERE id =?",
+    )
+    .bind(base_balance.to_string())
+    .bind(usdt_balance.to_string())
+    .bind(row.id.clone())
+    .execute(&pool)
+    .await
+    .unwrap();
+
     println!("updated row: {:?}", updated_row);
 
-    Ok(())
-}
-
-// Generate the type-safe contract bindings by providing the ABI
-// definition in human readable format
-abigen!(
-    IUniswapV2Pair,
-    r#"[
-        function getReserves() external view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)
-    ]"#,
-);
-
-async fn request_rpc() -> Result<(), Box<dyn std::error::Error>> {
-    // 请求rpc
-
-    let client = Provider::<Http>::try_from("https://eth.llamarpc.com")?;
-    let client = Arc::new(client);
-
-    // ETH/USDT pair on Uniswap V2
-    let address = "0x0d4a11d5EEaaC28EC3F61d100daF4d40471f1852".parse::<Address>()?;
-    let pair = IUniswapV2Pair::new(address, Arc::clone(&client));
-
-    // getReserves -> get_reserves
-    let (reserve0, reserve1, _timestamp) = pair.get_reserves().call().await?;
-    println!("Reserves (ETH, USDT): ({reserve0}, {reserve1})");
-
-    let mid_price = f64::powi(10.0, 18 - 6) * reserve1 as f64 / reserve0 as f64;
-    println!("ETH/USDT price: {mid_price:.2}");
-
-    Ok(())
-}
-
-async fn request_rpc_bsc() -> Result<(), Box<dyn std::error::Error>> {
-    // 请求rpc
-
-    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
-    let client = Provider::<Http>::try_from(rpc_url)?;
-    let client = Arc::new(client);
-
-    let balance = client
-        .get_balance("0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e", None)
-        .await?;
-
-    println!("balance is {}", balance);
     Ok(())
 }
 
