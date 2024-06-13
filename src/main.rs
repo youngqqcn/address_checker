@@ -9,6 +9,7 @@ use ethers::{
 };
 use eyre::Result;
 use sqlx::{mysql::MySqlPoolOptions, FromRow};
+use tokio::time::Instant;
 
 // #[derive(FromRow, Debug, Clone)]
 #[derive(FromRow, Debug, PartialEq, Eq, Clone)]
@@ -27,12 +28,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Hello, world!");
     dotenv().ok();
 
-    connect_mysql().await?;
+    loop {
+        let start_time = Instant::now();
+        let result = check_address_balance().await;
+        match result {
+            Ok(_) => (),
+            Err(e) => {
+                println!("error: {:?}", e)
+            }
+        }
+        let x = start_time.elapsed();
+        if x.as_millis() < 200 {
+            // 休眠, 防止太快，被rpc节点限频
+            tokio::time::sleep(std::time::Duration::from_millis(200 - x.as_millis() as u64)).await;
+        }
+    }
 
-    Ok(())
+    // Ok(())
 }
 
-async fn connect_mysql() -> Result<(), sqlx::Error> {
+async fn check_address_balance() -> Result<(), sqlx::Error> {
     let database_url = std::env::var(format!("DATABASE_URL")).unwrap();
     // mysql 数据库
     let pool = MySqlPoolOptions::new()
@@ -40,7 +55,6 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
         .connect(&database_url)
         .await
         .unwrap();
-    // let mut conn = pool.acquire().await.unwrap();
 
     let result = sqlx::query_as::<_, AddressBalance>(
         "SELECT * from  address_balance where checked = 0 LIMIT 1",
@@ -98,7 +112,7 @@ async fn get_eth_balance(
 
     let balance = client.get_balance(address, None).await?;
 
-    println!("balance is {}", balance);
+    println!("{:#x} base balance is {}", address, balance);
     Ok(balance)
 }
 
@@ -126,7 +140,8 @@ async fn get_erc20_token_balance(
 
     // getReserves -> get_reserves
     let balance = erc20_token.balance_of(account).call().await?;
-    println!("balance is {balance}");
+    // println!("balance is {balance}");
+    println!("{:#x} usdt balance is {}", account, balance);
 
     Ok(balance)
 }
