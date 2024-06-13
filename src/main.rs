@@ -124,3 +124,70 @@ async fn get_eth_balance(address: Address) -> Result<U256, Box<dyn std::error::E
     println!("balance is {}", balance);
     Ok(balance)
 }
+
+// Generate the type-safe contract bindings by providing the ABI
+// definition in human readable format
+abigen!(
+    IERC20,
+    r#"[
+        function balanceOf(address account) external view returns (uint256)
+        function allowance(address owner, address spender) external view returns (uint256)
+    ]"#,
+);
+
+async fn get_erc20_token_balance(
+    account: Address,
+    contract: Address,
+) -> Result<U256, Box<dyn std::error::Error>> {
+    // 请求rpc
+    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+    let client = Provider::<Http>::try_from(rpc_url)?;
+    let client = Arc::new(client);
+
+    let erc20_token = IERC20::new(contract, Arc::clone(&client));
+
+    // getReserves -> get_reserves
+    let balance = erc20_token.balance_of(account).call().await?;
+    println!("balance is {balance}");
+
+    Ok(balance)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tokio::test;
+
+
+    fn setup() {
+        dotenv().ok();
+    }
+
+    #[test]
+    async fn test_get_eth_balance() {
+        setup();
+
+        let account = "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
+        .parse::<Address>()
+        .unwrap();
+
+        let x = get_eth_balance(account).await.unwrap();
+        assert_eq!(x.gt(&U256::from(0)), true);
+    }
+
+
+    #[test]
+    async fn test_get_erc20_token_balance(){
+        setup();
+
+        let account = "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
+            .parse::<Address>()
+            .unwrap();
+        let contract = "0x55d398326f99059fF775485246999027B3197955"
+            .parse::<Address>()
+            .unwrap();
+        let x = get_erc20_token_balance(account, contract).await.unwrap();
+        assert_eq!(x.gt(&U256::from(0)), true);
+    }
+}
