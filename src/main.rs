@@ -11,10 +11,14 @@ use eyre::Result;
 use sqlx::{mysql::MySqlPoolOptions, FromRow, MySql};
 
 // #[derive(FromRow, Debug, Clone)]
-#[derive(FromRow, Debug, PartialEq, Eq)]
-struct Person {
+#[derive(FromRow, Debug, PartialEq, Eq, Clone)]
+struct AddressBalance {
     id: i32,
-    name: String,
+    chain: String,
+    token: String,
+    addr: String,
+    checked: bool,
+    balance: String,
 }
 
 #[tokio::main]
@@ -22,19 +26,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Hello, world!");
     dotenv().ok();
 
-    // connect_mysql().await?;
+    connect_mysql().await?;
 
     // request_rpc().await?;
 
     // request_rpc_bsc().await?;
 
-    let ret = get_eth_balance(
-        "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
-            .parse::<Address>()
-            .unwrap(),
-    )
-    .await?;
-    println!("ret = {}", ret);
+    // let ret = get_eth_balance(
+    //     "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
+    //         .parse::<Address>()
+    //         .unwrap(),
+    // )
+    // .await?;
+    // println!("ret = {}", ret);
 
     Ok(())
 }
@@ -49,21 +53,48 @@ async fn connect_mysql() -> Result<(), sqlx::Error> {
         .unwrap();
     // let mut conn = pool.acquire().await.unwrap();
 
-    let row = sqlx::query_as::<_, Person>("SELECT * from  persons where id = ?")
-        .bind(1)
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+    // TODO: 处理空的情况
+    let row = sqlx::query_as::<_, AddressBalance>(
+        "SELECT * from  address_balance where checked = 0 LIMIT 1",
+    )
+    .bind(1)
+    .fetch_optional(&pool)
+    .await
+    .unwrap();
+
+    match row.clone() {
+        Some(row) => {
+            println!("Found row: {:?}", row);
+            // 处理查询到的结果
+        }
+        None => {
+            println!("No rows found.");
+            // 处理查询结果为空的情况
+            return Ok(());
+        }
+    };
 
     println!("{:?}", row);
 
-    let inserted_row = sqlx::query("INSERT INTO persons (name) VALUES(?)")
-        .bind("xxx1")
+    // let inserted_row =
+    //     sqlx::query("INSERT INTO address_balance(chain, token, addr) VALUES(?, ?, ?)")
+    //         .bind("BSC")
+    //         .bind("BNB")
+    //         .bind("0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e")
+    //         .execute(&pool)
+    //         .await
+    //         .unwrap();
+    // println!("inserted row: {:?}", inserted_row);
+
+
+    let updated_row = sqlx::query("UPDATE address_balance SET balance=? , checked=1 WHERE id =?")
+        .bind("123")
+        .bind(row.unwrap().id.clone())
         .execute(&pool)
         .await
         .unwrap();
 
-    println!("inserted row: {:?}", inserted_row);
+    println!("updated row: {:?}", updated_row);
 
     Ok(())
 }
@@ -153,12 +184,10 @@ async fn get_erc20_token_balance(
     Ok(balance)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use tokio::test;
-
 
     fn setup() {
         dotenv().ok();
@@ -169,16 +198,15 @@ mod tests {
         setup();
 
         let account = "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
-        .parse::<Address>()
-        .unwrap();
+            .parse::<Address>()
+            .unwrap();
 
         let x = get_eth_balance(account).await.unwrap();
         assert_eq!(x.gt(&U256::from(0)), true);
     }
 
-
     #[test]
-    async fn test_get_erc20_token_balance(){
+    async fn test_get_erc20_token_balance() {
         setup();
 
         let account = "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
