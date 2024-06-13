@@ -5,6 +5,7 @@ use ethers::{
     contract::abigen,
     core::types::Address,
     providers::{Http, Middleware, Provider},
+    types::U256,
 };
 use eyre::Result;
 use sqlx::{mysql::MySqlPoolOptions, FromRow, MySql};
@@ -25,7 +26,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // request_rpc().await?;
 
-    request_rpc_bsc().await?;
+    // request_rpc_bsc().await?;
+
+    let ret = get_eth_balance(
+        "0xE2bcF8373f6a6BD14189c7D4C5dBE7BE8838937e"
+            .parse::<Address>()
+            .unwrap(),
+    )
+    .await?;
+    println!("ret = {}", ret);
 
     Ok(())
 }
@@ -101,4 +110,17 @@ async fn request_rpc_bsc() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("balance is {}", balance);
     Ok(())
+}
+
+async fn get_eth_balance(address: Address) -> Result<U256, Box<dyn std::error::Error>> {
+    // 请求rpc
+
+    let rpc_url = std::env::var(format!("BSC_RPC_URL")).unwrap();
+    let client = Provider::<Http>::try_from(rpc_url)?;
+    let client = Arc::new(client);
+
+    let balance = client.get_balance(address, None).await?;
+
+    println!("balance is {}", balance);
+    Ok(balance)
 }
