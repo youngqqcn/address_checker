@@ -11,3 +11,4 @@ tokio = { version = "1.38.0", features = ["full"] }
 # ethers = "2.0"
 ethers = { version = "2.0", features = ["legacy"] }
 eyre = "0.6.12"
+anychain-tron = "0.2.3"
